@@ -86,40 +86,16 @@ export default function TextEditor({ docId }) {
   };
 
   return (
-    <div style={styles.shell}>
-      <div style={styles.card}>
-
-        {/* Toolbar */}
-        <div style={styles.toolbar}>
-          <div style={styles.dots}>
-            {[0, 1, 2].map(i => <span key={i} style={styles.dot} />)}
-          </div>
-          <span style={styles.label}>doc/{docId}</span>
-          <span style={styles.meta}>{charCount} chars</span>
-        </div>
-
-        {/* Textarea */}
-        <textarea
-          style={styles.textarea}
-          value={text}
-          onChange={handleChange}
-          placeholder={`Writing document #${docId}…`}
-          spellCheck
-          disabled={status === "loading"}
-        />
-
-        {/* Footer */}
-        <div style={styles.footer}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={styles.btn} onClick={() => navigator.clipboard.writeText(text)}>copy</button>
-            <button style={styles.btn} onClick={handleClear}>clear</button>
-          </div>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <span style={styles.meta}>{statusLabel[status]}</span>
-            <span style={styles.meta}>{wordCount} words</span>
-          </div>
-        </div>
-
+     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <textarea
+        style={{ ...styles.textarea, flex: 1, minHeight: 0 }}
+        value={text}
+        onChange={handleChange}
+        placeholder={`Writing document #${docId}…`}
+        spellCheck
+      />
+      <div style={styles.footer}>
+        {/* existing footer */}
       </div>
     </div>
   );

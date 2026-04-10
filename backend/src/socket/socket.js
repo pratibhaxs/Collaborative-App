@@ -19,6 +19,14 @@ function initSocket(server) {
         userId: socket.id,
         message: `A new user joined document ${docId}`,
       });
+
+      socket.on("send-shape", ({ docId, shape }) => {
+        socket.to(docId).emit("receive-shape", shape);
+      });
+
+      socket.on("clear-canvas", ({ docId }) => {
+        socket.to(docId).emit("canvas-cleared");
+      });
     });
 
     // receive changes from one user → broadcast to everyone else in room

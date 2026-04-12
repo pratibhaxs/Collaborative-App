@@ -86,7 +86,7 @@ export default function DrawingCanvas({
 
   // ── socket: join room + receive remote shapes/clear ───────
   useEffect(() => {
-    socket.emit("join-room", docId);
+    socket.emit("join-room", { docId, userName: "canvas" });
 
     socket.on("receive-shape", (shape) => {
       drawShape(getCtx(), shape);
@@ -210,6 +210,7 @@ export default function DrawingCanvas({
       ref={canvasRef}
       className="w-full h-full cursor-crosshair"
       style={{ background: "transparent" }}
+      placeholder="Draw here..."
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}

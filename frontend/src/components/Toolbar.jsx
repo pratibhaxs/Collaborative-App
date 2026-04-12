@@ -7,7 +7,7 @@ import {
 
 const tools = [
   { id: "pen",    label: "Pen",      Icon: Pencil  },
-  { id: "rect",   label: "Rect",     Icon: Square  },
+  { id: "rect",   label: "Rectangle",     Icon: Square  },
   { id: "circle", label: "Circle",   Icon: Circle  },
   { id: "line",   label: "Line",     Icon: Minus   },
 ];
@@ -83,23 +83,23 @@ export default function Toolbar({
       <div className="w-px h-5 mx-1" style={{ background: "rgba(255,255,255,0.12)" }} />
 
       {/* Color picker */}
-      <label
-        ref={addRef}
-        title="Color"
-        className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer relative"
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
-      >
-        <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-lg"
-          style={{ background: color }} />
-        <input
-          type="color"
-          value={color}
-          onChange={e => setColor(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-        />
-      </label>
+        <button
+  ref={addRef}
+  title="Color"
+  className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer relative"
+  onMouseEnter={onEnter}
+  onMouseLeave={onLeave}
+  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
+>
+  <div className="w-5 h-5 rounded-full border-2 border-white/30 shadow-lg"
+    style={{ background: color }} />
+  <input
+    type="color"
+    value={color}
+    onChange={e => setColor(e.target.value)}
+    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+  />
+</button>
 
       {/* Divider */}
       <div className="w-px h-5 mx-1" style={{ background: "rgba(255,255,255,0.12)" }} />

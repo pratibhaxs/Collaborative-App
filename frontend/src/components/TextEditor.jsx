@@ -25,7 +25,7 @@ export default function TextEditor({ docId }) {
 
   // socket — join room and listen for changes
   useEffect(() => {
-    socket.emit("join-room", docId);
+    socket.emit("join-room", { docId, userName: "editor" });
 
     socket.on("receive-changes", (content) => {
       isRemoteChange.current = true;
@@ -91,12 +91,9 @@ export default function TextEditor({ docId }) {
         style={{ ...styles.textarea, flex: 1, minHeight: 0 }}
         value={text}
         onChange={handleChange}
-        placeholder={`Writing document #${docId}…`}
+        placeholder="Write here..."
         spellCheck
       />
-      <div style={styles.footer}>
-        {/* existing footer */}
-      </div>
     </div>
   );
 }

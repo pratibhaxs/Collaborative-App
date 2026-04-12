@@ -1,5 +1,7 @@
 const { Server } = require("socket.io");
 
+const rooms = {};
+
 function initSocket(server) {
   const io = new Server(server, {
     cors: {
@@ -11,42 +13,57 @@ function initSocket(server) {
   io.on("connection", (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    socket.on("join-room", (docId) => {
+    // join room
+    socket.on("join-room", ({ docId, userName }) => {
       socket.join(docId);
-      console.log(`User ${socket.id} joined room: ${docId}`);
+      socket.docId    = docId;
+      socket.userName = userName;
 
-      socket.to(docId).emit("user-joined", {
-        userId: socket.id,
-        message: `A new user joined document ${docId}`,
-      });
+      if (!rooms[docId]) rooms[docId] = [];
+      rooms[docId].push({ id: socket.id, name: userName });
 
-      socket.on("send-shape", ({ docId, shape }) => {
-        socket.to(docId).emit("receive-shape", shape);
-      });
+      io.to(docId).emit("room-users", rooms[docId]);
+      socket.to(docId).emit("user-joined", { name: userName });
 
-      socket.on("clear-canvas", ({ docId }) => {
-        socket.to(docId).emit("canvas-cleared");
-      });
+      console.log(`${userName} joined room: ${docId}`);
     });
 
-    // receive changes from one user → broadcast to everyone else in room
+    // text sync
     socket.on("send-changes", ({ docId, content }) => {
-      socket.to(docId).emit("receive-changes", content);  // socket.to() excludes sender
+      socket.to(docId).emit("receive-changes", content);
     });
 
-    socket.on("leave-room", (docId) => {
+    // drawing sync
+    socket.on("send-shape", ({ docId, shape }) => {
+      socket.to(docId).emit("receive-shape", shape);
+    });
+
+    // clear canvas
+    socket.on("clear-canvas", ({ docId }) => {
+      socket.to(docId).emit("canvas-cleared");
+    });
+
+    // leave room
+    socket.on("leave-room", ({ docId }) => {
       socket.leave(docId);
-      console.log(`User ${socket.id} left room: ${docId}`);
-
-      socket.to(docId).emit("user-left", {
-        userId: socket.id,
-        message: `A user left document ${docId}`,
-      });
+      if (rooms[docId]) {
+        rooms[docId] = rooms[docId].filter(u => u.id !== socket.id);
+        io.to(docId).emit("room-users", rooms[docId]);
+      }
+      socket.to(docId).emit("user-left", { name: socket.userName });
     });
 
+    // disconnect
     socket.on("disconnect", () => {
+      const { docId, userName } = socket;
+      if (docId && rooms[docId]) {
+        rooms[docId] = rooms[docId].filter(u => u.id !== socket.id);
+        io.to(docId).emit("room-users", rooms[docId]);
+        io.to(docId).emit("user-left", { name: userName });
+      }
       console.log(`User disconnected: ${socket.id}`);
     });
+
   });
 
   return io;

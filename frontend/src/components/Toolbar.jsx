@@ -57,8 +57,8 @@ export default function Toolbar({
 
   return (
     <div ref={toolbarRef}
-      className="flex items-center gap-2 px-4 py-2 rounded-2xl"
-      style={glass}>
+  className="flex items-center gap-2 px-4 py-2 rounded-2xl"
+  style={glass}>
 
       {/* Tool buttons */}
       {tools.map(({ id, label, Icon }) => (

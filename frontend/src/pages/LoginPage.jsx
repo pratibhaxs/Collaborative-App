@@ -36,9 +36,8 @@ export default function LoginPage() {
   return (
     <div style={styles.shell}>
       <div style={styles.card}>
-        <div style={styles.logo}>C</div>
-        <h1 style={styles.title}>Welcome back</h1>
-        <p style={styles.subtitle}>Sign in to Collab Editor</p>
+        <h1 style={styles.title}>Sign In</h1>
+       
 
         {error && <div style={styles.error}>{error}</div>}
 

@@ -26,8 +26,6 @@ export default function DashboardPage() {
   return (
     <div style={styles.shell}>
       <header style={styles.header}>
-        <div style={styles.logo}>C</div>
-        <p style={styles.appName}>Collab Editor</p>
         <div style={{ flex: 1 }} />
         <div style={styles.userInfo}>
           <div style={styles.avatar}>
@@ -46,11 +44,8 @@ export default function DashboardPage() {
       <main style={styles.main}>
         <div style={styles.welcome}>
           <h1 style={styles.welcomeTitle}>
-            Welcome back, {user?.displayName?.split(" ")[0]} 👋
+            Welcome, {user?.displayName?.split(" ")[0]}
           </h1>
-          <p style={styles.welcomeSub}>
-            Pick a document to start collaborating
-          </p>
         </div>
 
         <div style={styles.grid}>
@@ -60,7 +55,7 @@ export default function DashboardPage() {
             <h2 style={styles.cardTitle}>Open Document</h2>
             <p style={styles.cardSub}>Click a document to start editing</p>
             <div style={styles.docRow}>
-              {["1", "2", "3", "team", "notes"].map(id => (
+              {["1", "2", "3", "4", "5"].map(id => (
                 <button
                   key={id}
                   onClick={() => openDoc(id)}
@@ -78,7 +73,6 @@ export default function DashboardPage() {
               Users Currently Online
               <span style={styles.badge}>{activeUsers.length}</span>
             </h2>
-            <p style={styles.cardSub}>Updates in real-time</p>
             <div style={styles.userList}>
               {activeUsers.length === 0 && (
                 <p style={{ color: "#aaa", fontSize: "14px" }}>

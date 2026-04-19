@@ -1,178 +1,315 @@
-import { useState, useEffect, useRef } from "react";
-import { io } from "socket.io-client";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  updateDocText,
+  listenDocText,
+  updateCursor,
+  removeCursor,
+  listenCursors,
+  setTypingStatus,
+  listenTyping,
+} from "../firebase/database";
 
-const socket = io("http://localhost:5000");
-const API = "http://localhost:5000/api";
+// assign a random color to each user
+const USER_COLORS = [
+  "#6366f1", "#f59e0b", "#10b981", "#ef4444",
+  "#8b5cf6", "#06b6d4", "#f97316", "#ec4899",
+];
+
+const getColor = (uid) => {
+  let hash = 0;
+  for (let i = 0; i < uid.length; i++) {
+    hash = uid.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
+};
 
 export default function TextEditor({ docId }) {
-  const [text, setText] = useState("");
-  const [status, setStatus] = useState("loading");  // loading | saved | saving
-  const isRemoteChange = useRef(false);
-  const saveTimer = useRef(null);
+  const { user }                      = useAuth();
+  const [text, setText]               = useState("");
+  const [cursors, setCursors]         = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const [status, setStatus]           = useState("loading");
 
-  // load document when docId changes
+  const textareaRef   = useRef(null);
+  const isRemote      = useRef(false);
+  const typingTimer   = useRef(null);
+  const saveTimer     = useRef(null);
+  const myColor       = useRef(user ? getColor(user.uid) : "#6366f1");
+
+  // ── Load text from Firebase on mount ─────────────────────
   useEffect(() => {
+    if (!docId) return;
     setStatus("loading");
 
-    fetch(`${API}/documents/${docId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setText(data.document.content);
+    const unsub = listenDocText(docId, (val) => {
+      // only update if change came from another user
+      if (isRemote.current) {
+        setText(val);
+        isRemote.current = false;
+      } else if (status === "loading") {
+        setText(val);
         setStatus("saved");
-      })
-      .catch(() => setStatus("error"));
-  }, [docId]);
-
-  // socket — join room and listen for changes
-  useEffect(() => {
-    socket.emit("join-room", { docId, userName: "editor" });
-
-    socket.on("receive-changes", (content) => {
-      isRemoteChange.current = true;
-      setText(content);
+      }
     });
 
-    return () => {
-      socket.emit("leave-room", docId);
-      socket.off("receive-changes");
-    };
+    setStatus("saved");
+    return () => unsub();
   }, [docId]);
 
-  // auto-save every 3 seconds after typing stops
-  const triggerAutoSave = (content) => {
+  // ── Listen for other users cursors ────────────────────────
+  useEffect(() => {
+    if (!docId || !user) return;
+    const unsub = listenCursors(docId, (allCursors) => {
+      // filter out own cursor
+      setCursors(allCursors.filter(c => c.uid !== user.uid));
+    });
+    return () => {
+      unsub();
+      removeCursor(docId, user.uid);
+    };
+  }, [docId, user]);
+
+  // ── Listen for typing indicators ──────────────────────────
+  useEffect(() => {
+    if (!docId || !user) return;
+    const unsub = listenTyping(docId, (typing) => {
+      setTypingUsers(typing.filter(t => t.uid !== user.uid));
+    });
+    return () => {
+      unsub();
+      setTypingStatus(docId, user.uid, user.displayName, false);
+    };
+  }, [docId, user]);
+
+  // ── Debounced save to Firebase ────────────────────────────
+  const triggerSave = useCallback((value) => {
     setStatus("saving");
     clearTimeout(saveTimer.current);
-
     saveTimer.current = setTimeout(async () => {
-      try {
-        await fetch(`${API}/documents/${docId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-        });
-        setStatus("saved");
-      } catch {
-        setStatus("error");
-      }
-    }, 3000);  // saves 3 seconds after user stops typing
-  };
+      await updateDocText(docId, value);
+      setStatus("saved");
+    }, 1000); // save 1 second after typing stops
+  }, [docId]);
 
+  // ── Handle typing ─────────────────────────────────────────
   const handleChange = (e) => {
-    const newText = e.target.value;
-    setText(newText);
+    const val = e.target.value;
+    setText(val);
+    isRemote.current = false;
+    triggerSave(val);
 
-    if (!isRemoteChange.current) {
-      socket.emit("send-changes", { docId, content: newText });
-      triggerAutoSave(newText);
+    // typing indicator — show for 2s after last keystroke
+    if (user) {
+      setTypingStatus(docId, user.uid, user.displayName, true);
+      clearTimeout(typingTimer.current);
+      typingTimer.current = setTimeout(() => {
+        setTypingStatus(docId, user.uid, user.displayName, false);
+      }, 2000);
     }
-
-    isRemoteChange.current = false;
   };
 
-  const handleClear = () => {
+  // ── Track cursor position ─────────────────────────────────
+  const handleCursorMove = () => {
+    if (!textareaRef.current || !user) return;
+    const { selectionStart, selectionEnd } = textareaRef.current;
+    updateCursor(docId, user.uid, {
+      uid:   user.uid,
+      name:  user.displayName || user.email,
+      color: myColor.current,
+      start: selectionStart,
+      end:   selectionEnd,
+    });
+  };
+
+  // ── Clear All ─────────────────────────────────────────────
+  const handleClearAll = async () => {
     setText("");
-    socket.emit("send-changes", { docId, content: "" });
-    triggerAutoSave("");
+    await updateDocText(docId, "");
+    setStatus("saved");
+    textareaRef.current?.focus(); // focus back to textarea
+  };
+
+  // ── Get cursor pixel position from character index ────────
+  const getCursorCoords = (index) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return { top: 0, left: 0 };
+
+    const style     = window.getComputedStyle(textarea);
+    const lineHeight = parseInt(style.lineHeight) || 20;
+    const paddingLeft = parseInt(style.paddingLeft) || 0;
+    const paddingTop  = parseInt(style.paddingTop)  || 0;
+    const charWidth   = 8; // approximate char width
+
+    const textBefore = text.slice(0, index);
+    const lines      = textBefore.split("\n");
+    const lineNum    = lines.length - 1;
+    const charNum    = lines[lines.length - 1].length;
+
+    return {
+      top:  paddingTop  + lineNum * lineHeight,
+      left: paddingLeft + charNum * charWidth,
+    };
   };
 
   const charCount = text.length;
   const wordCount = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
 
+  const statusColor = {
+    loading: "#aaa",
+    saving:  "#f59e0b",
+    saved:   "#10b981",
+    error:   "#ef4444",
+  };
+
   const statusLabel = {
-    loading : "loading…",
-    saving  : "saving…",
-    saved   : "saved",
-    error   : "save failed",
+    loading: "loading…",
+    saving:  "saving…",
+    saved:   "saved",
+    error:   "error",
   };
 
   return (
-     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <textarea
-        style={{ ...styles.textarea, flex: 1, minHeight: 0 }}
-        value={text}
-        onChange={handleChange}
-        placeholder="Write here..."
-        spellCheck
-      />
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+
+      {/* Typing indicator */}
+      {typingUsers.length > 0 && (
+        <div style={{
+          padding: "4px 16px",
+          fontSize: "12px",
+          color: "#888",
+          fontStyle: "italic",
+          borderBottom: "1px solid #f0f0f0",
+          background: "#fafafa",
+        }}>
+          {typingUsers.map(u => u.name).join(", ")}
+          {typingUsers.length === 1 ? " is" : " are"} typing...
+        </div>
+      )}
+
+      {/* Editor area with cursor overlay */}
+      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleChange}
+          onKeyUp={handleCursorMove}
+          onClick={handleCursorMove}
+          onSelect={handleCursorMove}
+          placeholder="Write here..."
+          disabled={status === "loading"}
+          spellCheck
+          style={{
+            width: "100%",
+            height: "100%",
+            padding: "24px",
+            border: "none",
+            outline: "none",
+            resize: "none",
+            background: "transparent",
+            fontSize: "15px",
+            lineHeight: "1.8",
+            color: "#1f1f1f",
+            fontFamily: "'Georgia', serif",
+            caretColor: myColor.current,
+            position: "relative",
+            zIndex: 1,
+          }}
+        />
+
+        {/* Cursor overlay — shows other users cursors */}
+        <div style={{
+          position: "absolute",
+          top: 0, left: 0,
+          width: "100%", height: "100%",
+          pointerEvents: "none",
+          zIndex: 2,
+        }}>
+          {cursors.map(cursor => {
+            const coords = getCursorCoords(cursor.start);
+            return (
+              <div
+                key={cursor.uid}
+                style={{
+                  position: "absolute",
+                  top:  `${coords.top}px`,
+                  left: `${coords.left}px`,
+                  transition: "top 0.1s, left 0.1s", // smooth cursor movement
+                }}
+              >
+                {/* Cursor line */}
+                <div style={{
+                  width: "2px",
+                  height: "20px",
+                  background: cursor.color,
+                  borderRadius: "1px",
+                }} />
+                {/* Name label */}
+                <div style={{
+                  position: "absolute",
+                  top: "-20px",
+                  left: "0px",
+                  background: cursor.color,
+                  color: "white",
+                  fontSize: "10px",
+                  fontWeight: "600",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  whiteSpace: "nowrap",
+                  fontFamily: "sans-serif",
+                }}>
+                  {cursor.name}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        padding: "8px 16px",
+        borderTop: "1px solid #f0f0f0",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "#fafafa",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Clear All button */}
+          <button
+            onClick={handleClearAll}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "1px solid #fca5a5",
+              background: "#fef2f2",
+              color: "#dc2626",
+              fontSize: "12px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Clear All
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "11px", color: "#bbb", fontFamily: "monospace" }}>
+            {charCount} chars · {wordCount} words
+          </span>
+          <span style={{
+            fontSize: "11px",
+            fontFamily: "monospace",
+            color: statusColor[status],
+          }}>
+            {statusLabel[status]}
+          </span>
+        </div>
+      </div>
+
     </div>
   );
 }
-
-const styles = {
-  shell: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#f5f4f0",
-    padding: "2rem 1rem",
-    fontFamily: "'Lora', Georgia, serif",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 640,
-    background: "#fff",
-    borderRadius: 12,
-    border: "0.5px solid #d5d3cc",
-    overflow: "hidden",
-  },
-  toolbar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "10px 16px",
-    borderBottom: "0.5px solid #e4e3de",
-    background: "#f9f8f5",
-  },
-  dots: { display: "flex", gap: 6 },
-  dot: {
-    width: 10, height: 10,
-    borderRadius: "50%",
-    background: "#cccbc5",
-    display: "inline-block",
-  },
-  label: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 11,
-    color: "#999",
-    letterSpacing: "0.08em",
-  },
-  meta: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 11,
-    color: "#aaa",
-  },
-  textarea: {
-    width: "100%",
-    minHeight: 320,
-    padding: "28px 32px",
-    border: "none",
-    outline: "none",
-    resize: "none",
-    background: "transparent",
-    fontFamily: "'Lora', Georgia, serif",
-    fontSize: 16,
-    lineHeight: 1.85,
-    color: "#1a1a18",
-    letterSpacing: "0.01em",
-  },
-  footer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "10px 16px",
-    borderTop: "0.5px solid #e4e3de",
-    background: "#f9f8f5",
-  },
-  btn: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 11,
-    padding: "5px 12px",
-    borderRadius: 6,
-    border: "0.5px solid #ccc",
-    background: "transparent",
-    color: "#666",
-    cursor: "pointer",
-    letterSpacing: "0.05em",
-  },
-};

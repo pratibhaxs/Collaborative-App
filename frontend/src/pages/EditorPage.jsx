@@ -70,24 +70,11 @@ export default function EditorPage() {
           borderBottom: "1px solid rgba(255,255,255,0.08)",
         }}
       >
-        {/* Logo + title */}
-        <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
-          >
-            <span className="text-white text-sm font-bold">C</span>
-          </div>
-          <div>
-            <p className="text-white text-xl font-bold leading-none">
-              Collab Editor
-            </p>
-            <p className="text-white/60 text-sm font-mono mt-1">doc/{id}</p>
-          </div>
-        </div>
+  
 
         {/* Toolbar — centered */}
-        <div className="flex-1 flex justify-center">
+        <div className="flex items-center justify-center flex-1">
+
           <Toolbar
             activeTool={activeTool}
             setActiveTool={setActiveTool}
@@ -98,27 +85,8 @@ export default function EditorPage() {
           />
         </div>
 
-        {/* Right side — user info + live dot + logout */}
+
         <div className="flex items-center gap-4">
-          {/* Logged in user */}
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-              style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
-            >
-              {user?.displayName?.[0]?.toUpperCase() || "U"}
-            </div>
-            <span className="text-white/80 text-sm font-medium">
-              {user?.displayName || user?.email}
-            </span>
-          </div>
-
-          {/* Live indicator */}
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-white/50 text-xs">Live</span>
-          </div>
-
           {/* Logout */}
           <button
             onClick={handleLogout}

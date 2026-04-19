@@ -37,10 +37,7 @@ export default function SignupPage() {
   return (
     <div style={styles.shell}>
       <div style={styles.card}>
-        <div style={styles.logo}>C</div>
         <h1 style={styles.title}>Create account</h1>
-        <p style={styles.subtitle}>Join Collab Editor</p>
-
         {error && <div style={styles.error}>{error}</div>}
 
         <form onSubmit={handleSignup} style={styles.form}>
